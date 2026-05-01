@@ -1221,52 +1221,52 @@ async function openChat(chat, listItemUi) {
     // Check Membership
     updateJoinStatusUI(chat);
 
-    // Fetch from Supabase
-    if (window.supabaseClient) {
-        messagesContainer.innerHTML = '<div class="text-center text-dimmed mt-4">Loading messages...</div>';
+    // --- Fetch messages from MERN backend ---
+    const token = localStorage.getItem('unibuzz_token');
+    messagesContainer.innerHTML = '<div class="text-center text-dimmed mt-4">Loading messages...</div>';
 
-        // 1. Fetch existing
-        const { data, error } = await window.supabaseClient
-            .from('messages')
-            .select('*')
-            .eq('chat_id', activeChatId)
-            .order('created_at', { ascending: true });
-
-        if (!error && data) {
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/messages/${activeChatId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
             chat.messages = data.map(row => ({
-                id: row.id,
+                id: row.id || row._id,
                 senderId: row.sender_id,
                 text: row.text,
-                timestamp: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                image: row.image,
+                timestamp: new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }));
+        } else {
+            chat.messages = chat.messages || [];
         }
+    } catch(e) {
+        console.warn('Could not load messages from backend:', e);
+        chat.messages = chat.messages || [];
+    }
 
-        renderMessages(chat);
+    renderMessages(chat);
 
-        // 2. Real-time Subscription
-        if (currentSupabaseSubscription) {
-            window.supabaseClient.removeChannel(currentSupabaseSubscription);
-        }
-
-        currentSupabaseSubscription = window.supabaseClient
-            .channel(`chat_${activeChatId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${activeChatId}` }, payload => {
-                const newRow = payload.new;
-                // Add message directly when it streams in
-                if (!chat.messages.find(m => m.id === newRow.id)) {
-                    chat.messages.push({
-                        id: newRow.id,
-                        senderId: newRow.sender_id,
-                        text: newRow.text,
-                        timestamp: new Date(newRow.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    });
-                    renderMessages(chat);
-                }
-            })
-            .subscribe();
-
-    } else {
-        renderMessages(chat); // Mock fallback
+    // --- Join socket room for real-time messages ---
+    if (window.socket) {
+        window.socket.emit('join_chat', activeChatId);
+        // Remove old listener to avoid duplicates
+        window.socket.off('receive_message');
+        window.socket.on('receive_message', (newMsg) => {
+            if (newMsg.chat_id !== activeChatId) return;
+            const alreadyExists = chat.messages.find(m => m.id === (newMsg.id || newMsg._id));
+            if (!alreadyExists) {
+                chat.messages.push({
+                    id: newMsg.id || newMsg._id,
+                    senderId: newMsg.sender_id,
+                    text: newMsg.text,
+                    image: newMsg.image,
+                    timestamp: new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+                renderMessages(chat);
+            }
+        });
     }
 }
 
@@ -1425,47 +1425,54 @@ async function sendMessage() {
     const text = messageInput.value.trim();
     if (!text || !activeChatId) return;
 
-    if (window.supabaseClient) {
-        // Insert into Supabase Table
-        const payload = {
-            chat_id: activeChatId,
-            sender_id: currentUser.id,
-            text: text
-        };
+    const token = localStorage.getItem('unibuzz_token');
 
-        const { data, error } = await window.supabaseClient.from('messages').insert([payload]);
+    // Optimistic UI update: show message immediately
+    const chatItems = currentTab === 'chats' ? chatsData : (currentTab === 'groups' ? groupsData : communitiesData);
+    const chat = chatItems.find(c => c.id === activeChatId);
+    const tempId = 'temp_' + Date.now();
+    const optimisticMsg = {
+        id: tempId,
+        senderId: currentUser.id,
+        text: text,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    if (chat) { chat.messages = chat.messages || []; chat.messages.push(optimisticMsg); }
+    messageInput.value = '';
+    localStorage.removeItem(`draft_${activeChatId}`);
+    if (chat) renderMessages(chat);
+    scrollToBottom();
 
-        if (error) {
-            console.error("Error sending message:", error);
-            alert("Failed to send message: " + error.message);
-        } else {
-            messageInput.value = '';
-            localStorage.removeItem(`draft_${activeChatId}`);
-            // Local fallback scroll/render (Subscription will handle the actual UI update)
-            scrollToBottom();
-        }
-    } else {
-        // Fallback mock logic
-        const chatItems = currentTab === 'chats' ? chatsData : (currentTab === 'groups' ? groupsData : communitiesData);
-        const chat = chatItems.find(c => c.id === activeChatId);
-
-        if (chat) {
-            const newMsg = {
-                id: 'm' + Date.now(),
-                senderId: currentUser.id,
-                text: text,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            chat.messages.push(newMsg);
-            renderMessages(chat);
-            messageInput.value = '';
-            localStorage.removeItem(`draft_${activeChatId}`);
-            scrollToBottom();
-            if (currentTab === 'chats') renderChatsList();
-            else if (currentTab === 'groups') renderGroupsList();
-            else renderCommunitiesList();
+    if (token) {
+        // Send to MERN backend
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ chat_id: activeChatId, text, sender_id: currentUser.id })
+            });
+            const saved = await res.json();
+            // Replace optimistic message with real one from server
+            if (chat && saved.id) {
+                const idx = chat.messages.findIndex(m => m.id === tempId);
+                if (idx !== -1) {
+                    chat.messages[idx] = {
+                        id: saved.id,
+                        senderId: saved.sender_id,
+                        text: saved.text,
+                        timestamp: new Date(saved.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    };
+                    renderMessages(chat);
+                }
+            }
+        } catch(e) {
+            console.error('Failed to send message to backend:', e);
         }
     }
+
+    if (currentTab === 'chats') renderChatsList();
+    else if (currentTab === 'groups') renderGroupsList();
+    else renderCommunitiesList();
 }
 
 function scrollToBottom() {
