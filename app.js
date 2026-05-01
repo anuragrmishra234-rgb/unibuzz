@@ -133,6 +133,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
+        document.body.classList.remove('mobile-chat-active');
+        activeChatId = null;
+    });
+
     try {
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
@@ -919,6 +924,7 @@ function switchTab(tabId) {
     currentTab = tabId;
     activeChatId = null;
     activeLFId = null;
+    document.body.classList.remove('mobile-chat-active');
 
     // Update Nav UI
     const navItemsUI = document.querySelectorAll('.nav-top .nav-item[data-tab]');
@@ -1190,6 +1196,7 @@ function renderLFList() {
 async function openChat(chat, listItemUi) {
     activeChatId = chat.id;
     activeLFId = null;
+    document.body.classList.add('mobile-chat-active');
 
     document.querySelectorAll('.list-item').forEach(el => el.classList.remove('selected'));
     if (listItemUi) listItemUi.classList.add('selected');
