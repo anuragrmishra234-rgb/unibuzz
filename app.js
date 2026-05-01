@@ -112,6 +112,14 @@ const accountEmailEdit = document.getElementById('account-email-edit');
 const accountPhoneEdit = document.getElementById('account-phone-edit');
 const mentionPopup = document.getElementById('mention-popup');
 
+// --- Auth Headers Helper ---
+window.getAuthHeaders = () => {
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('unibuzz_token')}`
+    };
+};
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     window.socket = io(BACKEND_URL);
@@ -183,10 +191,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (session) {
                 isAuthenticated = true;
-                currentUser.id = session.user.id;
+                currentUser.id = session.user.id || session.user._id;
                 currentUser.email = session.user.email;
-                currentUser.name = session.user.user_metadata?.full_name || session.user.email.split('@')[0];
-                currentUser.avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=random`;
+                currentUser.name = session.user.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0];
+                currentUser.avatar = session.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=random`;
                 localStorage.setItem('unibuzz_session', JSON.stringify(currentUser));
                 localStorage.setItem('last_user', JSON.stringify({ name: currentUser.name, avatar: currentUser.avatar, email: currentUser.email }));
 
@@ -284,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             isAuthenticated = true;
+            localStorage.removeItem('unibuzz_token'); // Clear any stale real tokens
             localStorage.setItem('unibuzz_session', JSON.stringify(currentUser));
             finalizeAuth();
         });
@@ -652,6 +661,13 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("App initialization failed:", err);
         removeSplash(); // Still hide splash so user can see what's wrong
     }
+
+    // --- Multi-tab Sync ---
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'unibuzz_token' || e.key === 'unibuzz_session') {
+            location.reload();
+        }
+    });
 });
 
 async function initApp() {
@@ -669,23 +685,19 @@ async function initApp() {
 async function syncUserProfile() {
     if (!currentUser.id || currentUser.id.length < 5) return;
     try {
-        const profileData = {
-            id: currentUser.id,
-            name: currentUser.name || '',
-            avatar: currentUser.avatar || '',
-            email: currentUser.email || '',
-            updated_at: new Date()
-        };
-        // Only add bio/phone if they are defined to avoid potential schema errors
-        if (currentUser.bio) profileData.bio = currentUser.bio;
-        if (currentUser.phone) profileData.phone = currentUser.phone;
-
-        if (window.supabaseClient) {
-            const { error } = await window.supabaseClient.from('profiles').upsert(profileData);
-            if (error) console.warn("Profile Sync Warning:", error);
-        }
-    } catch (err) {
-        console.error("Critical Profile Sync Error:", err);
+        await fetch(`${BACKEND_URL}/api/profiles`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                id: currentUser.id,
+                name: currentUser.name,
+                avatar: currentUser.avatar,
+                bio: currentUser.bio,
+                phone: currentUser.phone
+            })
+        });
+    } catch (e) {
+        console.error("Profile sync failed:", e);
     }
 }
 
@@ -760,17 +772,28 @@ async function fetchGroups() {
         const groups = await res.json();
         if (!Array.isArray(groups)) return;
 
+        const mRes = await fetch(`${BACKEND_URL}/api/messages`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const allMessages = await mRes.json();
+
         groups.forEach(g => {
-            if (!g.messages) g.messages = [{ senderId: 'system', text: 'Welcome!', timestamp: '' }];
             if (!g.members) g.members = [];
             if (!g.admins) g.admins = [];
+            const groupMsgs = Array.isArray(allMessages) ? allMessages.filter(msg => msg.chat_id === g.id) : [];
+            g.messages = groupMsgs.length > 0 ? groupMsgs.map(row => ({
+                id: row.id || row._id,
+                senderId: row.sender_id,
+                text: row.text,
+                image: row.image,
+                timestamp: new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })) : [{ senderId: 'system', text: 'Welcome!', timestamp: '' }];
         });
 
         groupsData = groups.filter(g => g.type === 'group');
         communitiesData = groups.filter(g => g.type === 'community');
 
-        // Direct chats
-        const directChats = groups.filter(g => g.type === 'direct').map(g => {
+        const dbChats = groups.filter(g => g.type === 'direct').map(g => {
             g.participants = g.members;
             if (g.members) {
                 const otherUserId = g.members.find(id => id !== currentUser.id);
@@ -787,7 +810,7 @@ async function fetchGroups() {
             return g;
         });
 
-        directChats.forEach(dbC => {
+        dbChats.forEach(dbC => {
             if (!chatsData.find(d => d.id === dbC.id)) chatsData.push(dbC);
         });
     } catch(e) {
@@ -798,6 +821,8 @@ async function fetchGroups() {
 // Real-time sidebar updates via socket.io
 function initRealtime() {
     if (!window.socket) return;
+
+    // 1. Global Message/Sidebar Updates
     window.socket.on('global_message_update', async (newMsg) => {
         const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === newMsg.chat_id);
         if (chat) {
@@ -807,19 +832,86 @@ function initRealtime() {
                     id: newMsg.id || newMsg._id,
                     senderId: newMsg.sender_id,
                     text: newMsg.text,
+                    image: newMsg.image,
                     timestamp: new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 });
                 renderChatsList();
                 renderGroupsList();
                 renderCommunitiesList();
+                
+                // If this is the active chat, render the message area too
+                if (activeChatId === newMsg.chat_id) {
+                    renderMessages(chat);
+                }
             }
+        }
+    });
+
+    // 2. Room-specific Messages (for current chat)
+    window.socket.on('receive_message', (newMsg) => {
+        const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === newMsg.chat_id);
+        if (chat) {
+            if (!chat.messages) chat.messages = [];
+            if (!chat.messages.find(m => m.id === (newMsg.id || newMsg._id))) {
+                chat.messages.push({
+                    id: newMsg.id || newMsg._id,
+                    senderId: newMsg.sender_id,
+                    text: newMsg.text,
+                    image: newMsg.image,
+                    timestamp: new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+                if (activeChatId === newMsg.chat_id) {
+                    renderMessages(chat);
+                }
+                renderChatsList();
+            }
+        }
+    });
+
+    // 3. Global Listing Updates (Lost & Found)
+    window.socket.on('global_listing_update', async (newListing) => {
+        if (!lostFoundData.find(i => i.id === newListing.id)) {
+            lostFoundData.unshift({
+                id: newListing.id || newListing._id,
+                title: newListing.title,
+                type: newListing.type,
+                description: newListing.description,
+                author: newListing.author_id || newListing.author,
+                timestamp: new Date(newListing.createdAt || Date.now()).toLocaleDateString(),
+                image: newListing.image_url || newListing.image,
+                contact: newListing.contact
+            });
+            renderLFList();
         }
     });
 }
 
 async function fetchListings() {
-    // Listings are local-only for now; backend endpoint can be added later
-    // lostFoundData is populated via the add-new flow
+    const token = localStorage.getItem('unibuzz_token');
+    if (!token) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/listings`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+            lostFoundData.length = 0;
+            data.forEach(item => {
+                lostFoundData.push({
+                    id: item.id || item._id,
+                    title: item.title,
+                    type: item.type,
+                    description: item.description,
+                    author: item.author_id,
+                    timestamp: new Date(item.createdAt).toLocaleDateString(),
+                    image: item.image_url,
+                    contact: item.contact
+                });
+            });
+        }
+    } catch(e) {
+        console.warn('fetchListings failed:', e);
+    }
 }
 
 // --- Navigation & Routing ---
@@ -1168,22 +1260,6 @@ async function openChat(chat, listItemUi) {
     // --- Join socket room for real-time messages ---
     if (window.socket) {
         window.socket.emit('join_chat', activeChatId);
-        // Remove old listener to avoid duplicates
-        window.socket.off('receive_message');
-        window.socket.on('receive_message', (newMsg) => {
-            if (newMsg.chat_id !== activeChatId) return;
-            const alreadyExists = chat.messages.find(m => m.id === (newMsg.id || newMsg._id));
-            if (!alreadyExists) {
-                chat.messages.push({
-                    id: newMsg.id || newMsg._id,
-                    senderId: newMsg.sender_id,
-                    text: newMsg.text,
-                    image: newMsg.image,
-                    timestamp: new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                });
-                renderMessages(chat);
-            }
-        });
     }
 }
 
@@ -1316,6 +1392,7 @@ window.logout = function () {
         localStorage.setItem('last_user', JSON.stringify(lastUser));
 
         localStorage.removeItem('unibuzz_session');
+        localStorage.removeItem('unibuzz_token');
         if (window.supabaseClient) window.supabaseClient.auth.signOut();
         location.reload();
     }
@@ -1375,7 +1452,7 @@ async function sendMessage() {
             const res = await fetch(`${BACKEND_URL}/api/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ chat_id: activeChatId, text, sender_id: currentUser.id })
+                body: JSON.stringify({ chat_id: activeChatId, text })
             });
             const saved = await res.json();
             if (chat && saved.id) {
@@ -1622,23 +1699,20 @@ window.deleteLFItem = async function (itemId) {
     const confirmed = confirm("Are you sure you want to delete this listing? This action cannot be undone.");
     if (!confirmed) return;
 
-    const isGuest = currentUser.id.startsWith('guest_');
-
-    if (window.supabaseClient && !isGuest) {
-        // Delete only by id — RLS policy on Supabase protects against unauthorized deletes
-        const { error } = await window.supabaseClient.from('listings').delete().eq('id', itemId);
-        if (error) {
-            alert("Error deleting listing: " + error.message);
-            return;
-        }
-        // Real-time subscription will update lostFoundData, but also update locally for instant feedback
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/listings/${itemId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) throw new Error("Delete failed");
+    } catch (err) {
+        console.error("Error deleting listing:", err);
+        alert("Error deleting listing. Please try again.");
+        return;
     }
 
-    // Always update local data immediately for instant UI feedback
     const index = lostFoundData.findIndex(i => i.id === itemId);
-    if (index !== -1) {
-        lostFoundData.splice(index, 1);
-    }
+    if (index !== -1) lostFoundData.splice(index, 1);
 
     activeLFId = null;
     renderLFList();
@@ -1658,7 +1732,6 @@ window.contactAuthor = async function (authorId, title) {
     );
 
     if (!chat) {
-        // Create chat locally first for instant UI response (no lag)
         chat = {
             id: 'c_dm_' + Date.now(),
             topic: authorContact.name,
@@ -1670,19 +1743,20 @@ window.contactAuthor = async function (authorId, title) {
         };
         chatsData.unshift(chat);
 
-        // Persist to Supabase in the background (non-blocking)
-        const isGuest = currentUser.id.startsWith('guest_') || authorId.startsWith('guest_');
-        if (window.supabaseClient && !isGuest) {
-            const chatPayload = { topic: authorContact.name, avatar: authorContact.avatar, type: 'direct' };
-            window.supabaseClient.from('groups').insert([chatPayload]).select().then(({ data, error }) => {
-                if (!error && data && data[0]) {
-                    // Update the local chat id with the real DB id
-                    chat.id = data[0].id;
-                    window.supabaseClient.from('group_members').insert([
-                        { group_id: chat.id, user_id: currentUser.id, is_admin: true },
-                        { group_id: chat.id, user_id: authorId, is_admin: false }
-                    ]).catch(console.error);
-                }
+        const token = localStorage.getItem('unibuzz_token');
+        if (token) {
+            fetch(`${BACKEND_URL}/api/groups`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    topic: authorContact.name,
+                    avatar: authorContact.avatar,
+                    type: 'direct',
+                    members: [currentUser.id, authorId],
+                    admins: [currentUser.id]
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.id) chat.id = data.id;
             }).catch(console.error);
         }
     }
@@ -1893,17 +1967,14 @@ async function leaveGroup() {
     const confirmed = confirm("Are you sure you want to leave this group?");
     if (!confirmed) return;
 
-    if (window.supabaseClient) {
-        const { error } = await window.supabaseClient.from('group_members')
-            .delete().match({ group_id: activeChatId, user_id: currentUser.id });
-        if (error) { alert("Error leaving group: " + error.message); return; }
-
-        // Add System Message to DB
-        await window.supabaseClient.from('messages').insert([{
-            chat_id: activeChatId,
-            sender_id: 'system',
-            text: `${getDisplayName(currentUser.id)} left.`
-        }]);
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups/${activeChatId}/leave`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) throw new Error("Leave failed");
+    } catch (err) {
+        console.error("Error leaving group:", err);
     }
 
     // Cleanup local state
@@ -1922,10 +1993,16 @@ async function deleteGroup() {
     const confirmed = confirm("ADMIN ALERT: Are you sure you want to PERMANENTLY DELETE this group and remove all members? This cannot be undone.");
     if (!confirmed) return;
 
-    if (window.supabaseClient) {
-        // Cascade should handle details if FKs are set, but we aim for the group row
-        const { error } = await window.supabaseClient.from('groups').delete().eq('id', activeChatId);
-        if (error) { alert("Error deleting group: " + error.message); return; }
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups/${activeChatId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) throw new Error("Delete failed");
+    } catch (err) {
+        console.error("Error deleting group:", err);
+        alert("Error deleting group.");
+        return;
     }
 
     // Local cleanup
@@ -2098,32 +2175,28 @@ window.addMockLF = async function () {
         contact: contactEl.value || currentUser.name
     };
 
-    if (window.supabaseClient) {
-        const { data, error } = await window.supabaseClient.from('listings').insert([payload]).select();
-        if (error) {
-            alert("Error posting: " + error.message);
-            if (btn) { btn.disabled = false; btn.textContent = 'Post Listing'; }
-            return;
-        }
-        if (data && data[0]) {
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/listings`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        const saved = await res.json();
+        if (saved.id) {
             const newItem = {
                 ...payload,
-                id: data[0].id,
+                id: saved.id,
                 author: payload.author_id,
                 image: payload.image_url,
                 timestamp: 'Just now'
             };
             lostFoundData.unshift(newItem);
         }
-    } else {
-        const newItem = {
-            id: 'lf' + Date.now(),
-            ...payload,
-            author: payload.author_id,
-            image: payload.image_url,
-            timestamp: 'Just now'
-        };
-        lostFoundData.unshift(newItem);
+    } catch (err) {
+        console.error("Error posting listing:", err);
+        alert("Error posting listing.");
+        if (btn) { btn.disabled = false; btn.textContent = 'Post Listing'; }
+        return;
     }
 
     if (btn) {
@@ -2140,65 +2213,20 @@ window.addMockLF = async function () {
 async function joinGroup(groupId) {
     const group = [...groupsData, ...communitiesData].find(g => g.id === groupId);
 
-    // LOCAL FALLBACK: for guest users or when no supabase
-    if (!window.supabaseClient || currentUser.id.startsWith('guest_')) {
-        if (group) {
-            if (!group.members) group.members = [];
-            if (!group.members.includes(currentUser.id)) {
-                group.members.push(currentUser.id);
-                group.messages.push({
-                    senderId: 'system',
-                    text: `${getDisplayName(currentUser.id)} joined.`,
-                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                });
-            }
-            renderGroupsList(); renderCommunitiesList();
-            openChat(group);
-        }
-        return;
-    }
-
-    const { data: existing } = await window.supabaseClient
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', groupId)
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-
-    if (existing) {
-        // Already a member — just sync and open
-        await fetchGroups();
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups/${groupId}/join`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        const saved = await res.json();
+        
+        await fetchGroups(); // Refresh group list
         const freshGroup = [...groupsData, ...communitiesData].find(g => g.id === groupId);
         if (freshGroup) openChat(freshGroup);
-        return;
+    } catch (err) {
+        console.error("Error joining group:", err);
+        alert("Error joining group.");
     }
-
-    const { error } = await window.supabaseClient.from('group_members').insert([
-        { group_id: groupId, user_id: currentUser.id, is_admin: false }
-    ]);
-
-    if (error) {
-        if (error.code === '23505') {
-            // Duplicate — already a member, just open
-            await fetchGroups();
-            const freshGroup = [...groupsData, ...communitiesData].find(g => g.id === groupId);
-            if (freshGroup) openChat(freshGroup);
-        } else {
-            alert("Error joining group: " + error.message);
-        }
-        return;
-    }
-
-    // Add System Message
-    await window.supabaseClient.from('messages').insert([{
-        chat_id: groupId,
-        sender_id: 'system',
-        text: `${getDisplayName(currentUser.id)} joined.`
-    }]);
-
-    await fetchGroups();
-    const joinedGroup = [...groupsData, ...communitiesData].find(g => g.id === groupId);
-    if (joinedGroup) openChat(joinedGroup);
 }
 
 function updateJoinStatusUI(chat) {
@@ -2350,165 +2378,4 @@ async function searchGifs(query, container) {
 }
 
 
-// --- MONGODB MIGRATION OVERRIDES ---
-window.getAuthHeaders = () => {
-    return { 'Authorization': `Bearer ${localStorage.getItem('unibuzz_token')}`, 'Content-Type': 'application/json' };
-};
 
-window.logout = function () {
-    if (confirm("Logout from UNIBUZZ? 🥺")) {
-        const lastUser = { name: currentUser.name, avatar: currentUser.avatar, email: currentUser.email };
-        localStorage.setItem('last_user', JSON.stringify(lastUser));
-        localStorage.removeItem('unibuzz_session');
-        localStorage.removeItem('unibuzz_token');
-        location.reload();
-    }
-};
-
-async function fetchProfiles() {
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/profiles`, { headers: getAuthHeaders() });
-        const data = await res.json();
-        if (data && data.length) {
-            data.forEach(p => {
-                users[p.id] = { id: p.id, name: p.name, avatar: p.avatar, bio: p.bio, phone: p.phone, email: p.email };
-                if (p.id === currentUser.id) {
-                    Object.assign(currentUser, p);
-                    document.getElementById('profile-display-name').textContent = p.name;
-                    document.getElementById('profile-sidebar-img').src = p.avatar;
-                }
-            });
-        }
-    } catch(e) {}
-}
-
-async function fetchGroups() {
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/groups`, { headers: getAuthHeaders() });
-        const groups = await res.json();
-        
-        const mRes = await fetch(`${BACKEND_URL}/api/messages`, { headers: getAuthHeaders() });
-        const allMessages = await mRes.json();
-        
-        groups.forEach(g => {
-            if(!g.members) g.members = [];
-            if(!g.admins) g.admins = [];
-            const groupMsgs = allMessages ? allMessages.filter(msg => msg.chat_id === g.id) : [];
-            g.messages = groupMsgs.length > 0 ? groupMsgs.map(row => ({
-                id: row.id,
-                senderId: row.sender_id,
-                text: row.text,
-                image: row.image,
-                timestamp: new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            })) : [{ senderId: 'system', text: 'Welcome!', timestamp: '' }];
-        });
-
-        groupsData = [...groups.filter(g => g.type === 'group')];
-        communitiesData = [...groups.filter(g => g.type === 'community')];
-        const dbChats = groups.map(g => {
-            if (g.type === 'direct') {
-                g.participants = g.members;
-                const otherUserId = g.members.find(id => id !== currentUser.id);
-                if (otherUserId && users[otherUserId]) {
-                    g.topic = users[otherUserId].name;
-                    g.avatar = users[otherUserId].avatar;
-                }
-            }
-            return g;
-        });
-        chatsData = [];
-        dbChats.forEach(dbC => {
-            if (!chatsData.find(d => d.id === dbC.id)) chatsData.push(dbC);
-        });
-    } catch(e) {}
-}
-
-async function fetchListings() {
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/listings`, { headers: getAuthHeaders() });
-        const data = await res.json();
-        if (data && data.length) {
-            lostFoundData.length = 0;
-            data.forEach(item => {
-                lostFoundData.push({
-                    id: item.id,
-                    title: item.title,
-                    type: item.type,
-                    description: item.description,
-                    author: item.author_id,
-                    timestamp: new Date(item.createdAt).toLocaleDateString(),
-                    image: item.image_url,
-                    contact: item.contact
-                });
-            });
-        }
-    } catch(e) {}
-}
-
-async function syncUserProfile() {
-    if (!currentUser.id) return;
-    try {
-        await fetch(`${BACKEND_URL}/api/profiles`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(currentUser)
-        });
-    } catch (e) {}
-}
-
-async function sendMessage() {
-    const text = messageInput.value.trim();
-    if (!text || !activeChatId) return;
-
-    try {
-        await fetch(`${BACKEND_URL}/api/messages`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ chat_id: activeChatId, text })
-        });
-        messageInput.value = '';
-        scrollToBottom();
-    } catch(e) {
-        alert("Failed to send message.");
-    }
-}
-
-async function sendAttachment(base64Image) {
-    if (!activeChatId) return;
-    try {
-        await fetch(`${BACKEND_URL}/api/messages`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ chat_id: activeChatId, text: '📷 Photo', image: base64Image })
-        });
-    } catch(e) {}
-}
-
-function initRealtime() {
-    if(!window.socket) return;
-    window.socket.on('global_message_update', async () => {
-        await fetchGroups();
-        renderGroupsList();
-        renderCommunitiesList();
-        renderChatsList();
-    });
-    
-    window.socket.on('receive_message', (newMsg) => {
-        const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === newMsg.chat_id);
-        if (chat) {
-            if (!chat.messages) chat.messages = [];
-            if (!chat.messages.find(m => m.id === newMsg.id)) {
-                chat.messages.push({
-                    id: newMsg.id,
-                    senderId: newMsg.sender_id,
-                    text: newMsg.text,
-                    image: newMsg.image,
-                    timestamp: new Date(newMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                });
-                if (activeChatId === newMsg.chat_id) {
-                    renderMessages(chat);
-                }
-            }
-        }
-    });
-}
