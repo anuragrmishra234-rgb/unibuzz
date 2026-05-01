@@ -1,0 +1,18 @@
+{
+  "name": "UNIBUZZ College Community App",
+  "short_name": "UNIBUZZ",
+  "description": "Connect, chat, and find lost items on campus in real-time.",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Black_icon-college.svg/512px-Black_icon-college.svg.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
