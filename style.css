@@ -101,12 +101,13 @@
 body {
     background-color: var(--bg-main);
     color: var(--text-main);
-    height: 100vh;
+    width: 100%;
+    height: 100dvh;
     overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
-    background-image:
+    background-image: 
         radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 90% 80%, rgba(0, 242, 255, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 50% 50%, rgba(255, 0, 127, 0.04) 0%, transparent 50%);
@@ -1244,17 +1245,18 @@ textarea:focus {
     }
 
     .app-layout {
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100dvh; /* Dynamic viewport height for mobile browsers */
         max-width: none;
         border-radius: 0;
         border: none;
     }
 
     .app-layout > .row {
-        flex-direction: column-reverse; /* Navigation at bottom */
+        flex-direction: column-reverse; 
         flex-wrap: nowrap;
-        height: 100% !important;
+        height: 100%;
+        margin: 0;
     }
 
     .main-nav {
@@ -1290,12 +1292,12 @@ textarea:focus {
     /* Mobile View State Logic */
     .side-panel, .group-info-sidebar, #profile-sidebar {
         width: 100% !important;
-        flex: 1 1 auto;
+        flex: 1; /* Automatically take up all remaining space */
         display: flex !important;
         border-radius: 0;
         border: none;
-        height: calc(100% - 70px) !important;
         z-index: 10;
+        min-height: 0; /* Important for flex-grow to work in column */
     }
 
     #emoji-picker {
@@ -1321,11 +1323,13 @@ textarea:focus {
         top: 0;
         left: 0;
         width: 100%;
-        height: calc(100% - 70px);
+        height: 100%; /* Relative to the .row container */
         z-index: 20;
         background: var(--bg-main);
         transform: translateX(100%);
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
     }
 
     /* When a chat is active on mobile */
