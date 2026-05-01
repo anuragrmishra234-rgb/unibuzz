@@ -137,6 +137,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.remove('mobile-chat-active');
         activeChatId = null;
     });
+    document.getElementById('mobile-back-btn-lf')?.addEventListener('click', () => {
+        document.body.classList.remove('mobile-chat-active');
+        activeLFId = null;
+    });
 
     try {
         // PWA Service Worker Registration
@@ -1664,6 +1668,7 @@ function openLFItem(item) {
     chatView.classList.add('hidden');
     emptyState.classList.add('hidden');
     lfView.classList.remove('hidden');
+    document.body.classList.add('mobile-chat-active');
 
     document.getElementById('lf-view-title').textContent = `${item.type === 'lost' ? 'Lost' : 'Found'} Details`;
 

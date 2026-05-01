@@ -279,8 +279,7 @@
                     <!-- Input Area -->
                     <footer class="chat-input-area glass" style="position:relative;">
                         <input type="file" id="chat-file-input" style="display:none;" accept="image/*, application/pdf">
-                        <div id="emoji-picker" class="glass hidden"
-                            style="position:absolute; bottom:80px; left:0.5rem; width:320px; max-height:320px; border-radius:16px; background:var(--bg-panel); z-index:100; overflow:hidden; display:flex; flex-direction:column; border:1px solid rgba(255,255,255,0.08);">
+                        <div id="emoji-picker" class="glass hidden">
                             <!-- Category Tabs -->
                             <div id="emoji-tabs"
                                 style="display:flex; gap:2px; padding:8px 8px 4px; border-bottom:1px solid rgba(255,255,255,0.06); overflow-x:auto; flex-shrink:0;">
@@ -323,9 +322,7 @@
 
                         <button class="icon-btn" id="emoji-btn"><i class="ph ph-smiley"></i></button>
                         <button class="icon-btn" id="attach-btn"><i class="ph ph-paperclip"></i></button>
-                        <div id="mention-popup" class="glass hidden"
-                            style="position:absolute; bottom:100%; left:50px; width:220px; max-height:200px; border-radius:12px; overflow-y:auto; z-index:110; border:1px solid rgba(255,255,255,0.1); background:var(--bg-panel); margin-bottom:10px;">
-                        </div>
+                        <div id="mention-popup" class="glass hidden"></div>
                         <div class="message-input-wrapper">
                             <input type="text" id="message-input" placeholder="Type a message">
                         </div>
@@ -341,7 +338,12 @@
                 <!-- Lost & Found Form/Detail View -->
                 <div id="lf-view" class="view-state hidden flex-col h-full">
                     <header class="chat-header glass">
-                        <h3 id="lf-view-title">Lost & Found</h3>
+                        <div class="chat-info">
+                            <button class="icon-btn mobile-back-btn" id="mobile-back-btn-lf" style="display: none; margin-right: 8px;">
+                                <i class="ph ph-arrow-left"></i>
+                            </button>
+                            <h3 id="lf-view-title">Lost & Found</h3>
+                        </div>
                     </header>
                     <div class="lf-content scrollable custom-scrollbar p-6">
                         <!-- Dynamic content injected here: either Item Details or Upload Form -->
