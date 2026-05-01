@@ -2,6 +2,7 @@
   "name": "UNIBUZZ - College Vibe",
   "short_name": "UNIBUZZ",
   "description": "The ultimate real-time college community for chatting and campus listings.",
+  "id": "com.unibuzz.app",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#050508",
@@ -10,9 +11,27 @@
   "icons": [
     {
       "src": "favicon.svg",
-      "sizes": "512x512",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "https://unibuzz-brown.vercel.app/favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "https://unibuzz-brown.vercel.app/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://unibuzz-brown.vercel.app/favicon.svg",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "form_factor": "wide"
     }
   ]
 }
