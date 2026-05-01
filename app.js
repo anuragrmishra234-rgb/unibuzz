@@ -1,5 +1,5 @@
 // Mock Database (Now Dynamic)
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = 'https://unibuzz-bd9g.onrender.com';
 let currentUser = {
     id: '',
     name: '',
