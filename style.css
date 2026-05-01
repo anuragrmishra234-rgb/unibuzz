@@ -95,7 +95,16 @@
     padding: 0;
     box-sizing: border-box;
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-    letter-spacing: -0.01em;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden !important; /* Prevent any screen movement */
+    background: #000;
+    position: fixed; /* Prevent mobile pull-to-refresh and bounciness */
 }
 
 body {
@@ -1256,7 +1265,9 @@ textarea:focus {
         flex-direction: column-reverse; 
         flex-wrap: nowrap;
         height: 100%;
-        margin: 0;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden;
     }
 
     .main-nav {
@@ -1355,8 +1366,23 @@ textarea:focus {
 
     .message-bubble {
         font-size: 0.95rem;
-        padding: 0.6rem 0.9rem;
-        max-width: 90%;
+        padding: 0.75rem 1rem;
+        max-width: 85%;
+        line-height: 1.5;
+        text-align: left; /* Ensure consistent text alignment */
+    }
+
+    .chat-header h3 {
+        font-size: 1.1rem;
+        text-align: left;
+    }
+
+    .nav-item {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
     }
 
     .chat-input-area {
