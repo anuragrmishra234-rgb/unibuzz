@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const messageSchema = new mongoose.Schema({
-  chat_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Group', required: true },
+  chat_id: { type: String, required: true },
   sender_id: { type: String, required: true }, // 'system' or User ObjectId string
   text: { type: String, required: true },
   image: { type: String }
