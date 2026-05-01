@@ -1,17 +1,17 @@
 {
-  "name": "UNIBUZZ College Community App",
+  "name": "UNIBUZZ - College Vibe",
   "short_name": "UNIBUZZ",
-  "description": "Connect, chat, and find lost items on campus in real-time.",
-  "start_url": "/index.html",
+  "description": "The ultimate real-time college community for chatting and campus listings.",
+  "start_url": ".",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#3b82f6",
+  "background_color": "#050508",
+  "theme_color": "#00f2ff",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Black_icon-college.svg/512px-Black_icon-college.svg.png",
+      "src": "favicon.svg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]
