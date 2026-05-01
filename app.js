@@ -253,6 +253,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const authSubmitBtn = document.getElementById('auth-submit-btn');
         const authToggleText = document.getElementById('auth-toggle-text');
         const authToggleBtn = document.getElementById('auth-toggle-btn');
+        const authToggleTextForm = document.getElementById('auth-toggle-text-form');
+        const authToggleBtnForm = document.getElementById('auth-toggle-btn-form');
 
         showLoginBtn?.addEventListener('click', () => {
             if (loginDashboard) loginDashboard.classList.add('hidden');
@@ -286,8 +288,8 @@ document.addEventListener('DOMContentLoaded', () => {
             finalizeAuth();
         });
 
-        authToggleBtn?.addEventListener('click', (e) => {
-            e.preventDefault();
+        const toggleAuthMode = (e) => {
+            if(e) e.preventDefault();
             isSignUpMode = !isSignUpMode;
 
             // Ensure form is visible if coming from dashboard
@@ -299,17 +301,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 nameGroup.classList.remove('hidden');
                 phoneGroup.classList.remove('hidden');
                 authSubmitBtn.textContent = 'Sign Up';
-                authToggleText.textContent = "Already have an account?";
-                authToggleBtn.textContent = "Log In";
+                if(authToggleText) authToggleText.textContent = "Already have an account?";
+                if(authToggleBtn) authToggleBtn.textContent = "Log In";
+                if(authToggleTextForm) authToggleTextForm.textContent = "Already have an account?";
+                if(authToggleBtnForm) authToggleBtnForm.textContent = "Log In";
             } else {
                 authSubtitle.textContent = "Chat, Connect and Find what's yours!";
                 nameGroup.classList.add('hidden');
                 phoneGroup.classList.add('hidden');
                 authSubmitBtn.textContent = 'Log In';
-                authToggleText.textContent = "Don't have an account?";
-                authToggleBtn.textContent = "Sign Up";
+                if(authToggleText) authToggleText.textContent = "Don't have an account?";
+                if(authToggleBtn) authToggleBtn.textContent = "Sign Up";
+                if(authToggleTextForm) authToggleTextForm.textContent = "Don't have an account?";
+                if(authToggleBtnForm) authToggleBtnForm.textContent = "Sign Up";
             }
-        });
+        };
+
+        authToggleBtn?.addEventListener('click', toggleAuthMode);
+        authToggleBtnForm?.addEventListener('click', toggleAuthMode);
 
         loginForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
