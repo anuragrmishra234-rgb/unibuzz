@@ -1267,7 +1267,12 @@ textarea:focus {
         height: 100%;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden;
+        overflow: hidden; /* Keep the row itself locked */
+    }
+
+    .messages-area, .chat-list, .lf-list-container {
+        overflow-y: auto !important; /* Force internal scrolling */
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling for iOS */
     }
 
     .main-nav {
