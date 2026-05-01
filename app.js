@@ -146,6 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     try {
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(e => console.error(e));
+        }
+
         // --- Custom Wallpaper Support ---
         window.applyWallpaper = () => {
             const savedWP = localStorage.getItem('custom_wallpaper');

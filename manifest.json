@@ -1,37 +1,18 @@
 {
-  "name": "UNIBUZZ - College Vibe",
+  "name": "UNIBUZZ College Community App",
   "short_name": "UNIBUZZ",
-  "description": "The ultimate real-time college community for chatting and campus listings.",
-  "id": "com.unibuzz.app",
-  "start_url": ".",
+  "description": "Connect, chat, and find lost items on campus in real-time.",
+  "start_url": "/index.html",
   "display": "standalone",
-  "background_color": "#050508",
-  "theme_color": "#00f2ff",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "https://placehold.jp/192x192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://placehold.jp/512x512.png",
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Black_icon-college.svg/512px-Black_icon-college.svg.png",
       "sizes": "512x512",
-      "type": "image/png"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "https://placehold.jp/1280x720.png",
-      "sizes": "1280x720",
       "type": "image/png",
-      "form_factor": "wide"
+      "purpose": "any maskable"
     }
   ]
 }

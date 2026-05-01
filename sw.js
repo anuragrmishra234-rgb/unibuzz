@@ -1,12 +1,8 @@
 // UNIBUZZ Service Worker - Network First Strategy
 // This ensures fresh JS/CSS is always loaded from the server
 const CACHE_NAME = 'unibuzz-v5';
-const STATIC_CACHE = [
-  'https://unpkg.com/@phosphor-icons/web',
-  'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap',
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css',
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js'
-];
+const STATIC_CACHE = ['https://unpkg.com/@phosphor-icons/web',
+  'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap'];
 
 self.addEventListener('install', event => {
   // Skip waiting so new SW activates immediately
