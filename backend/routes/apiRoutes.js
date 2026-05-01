@@ -33,10 +33,21 @@ router.post('/profiles', async (req, res) => {
 // GROUPS
 router.get('/groups', async (req, res) => {
   try {
-    const groups = await Group.find({});
-    // Map _id to id for frontend compatibility
+    const userId = req.user.id;
+    // Return all groups where the current user is a member
+    const groups = await Group.find({ members: userId });
     const mappedGroups = groups.map(g => ({ ...g._doc, id: g._id.toString() }));
     res.json(mappedGroups);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/groups', async (req, res) => {
+  try {
+    const { type, topic, avatar, description, members, admins } = req.body;
+    const group = new Group({ type, topic, avatar, description, members: members || [], admins: admins || [] });
+    await group.save();
+    const mapped = { ...group._doc, id: group._id.toString() };
+    res.json(mapped);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

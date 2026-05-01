@@ -1940,60 +1940,50 @@ window.createChat = async function (contactIdParam) {
 
     // Check if direct chat already exists locally
     let existingChat = chatsData.find(c => c.type === 'direct' && c.participants && c.participants.includes(contactId) && c.participants.includes(currentUser.id));
-
     if (existingChat) {
         closeModal();
         openChat(existingChat, document.querySelector(`.list-item[data-chat-id="${existingChat.id}"]`));
         return;
     }
 
-    const chatPayload = {
-        topic: contact.name,
-        avatar: contact.avatar,
-        type: 'direct'
-    };
+    const token = localStorage.getItem('unibuzz_token');
+    const members = [currentUser.id, contactId].filter(Boolean);
 
-    if (window.supabaseClient) {
-        const { data, error } = await window.supabaseClient.from('groups').insert([chatPayload]).select();
-        if (!error && data) {
-            const newChatId = data[0].id;
-            const validMembers = [currentUser.id];
-            if (contactId) {
-                validMembers.push(contactId);
-            }
-
-            const membersData = validMembers.map(mId => ({ group_id: newChatId, user_id: mId, is_admin: mId === currentUser.id }));
-
-            if (membersData.length > 0) {
-                await window.supabaseClient.from('group_members').insert(membersData);
-            }
-
-            const newChat = {
-                ...data[0],
-                participants: [currentUser.id, contactId],
-                members: [currentUser.id, contactId],
-                messages: []
-            };
-            chatsData.unshift(newChat);
-            renderChatsList();
-            closeModal();
-            setTimeout(() => {
-                openChat(newChat, document.querySelector(`.list-item[data-chat-id="${newChat.id}"]`));
-            }, 50);
-        }
-    } else {
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+                type: 'direct',
+                topic: contact.name,
+                avatar: contact.avatar,
+                members,
+                admins: [currentUser.id]
+            })
+        });
+        const saved = await res.json();
         const newChat = {
-            id: 'c' + Date.now(),
-            ...chatPayload,
-            participants: [currentUser.id, contactId],
-            messages: [{ senderId: currentUser.id, text: `Started a chat with ${contact.name}`, timestamp: 'Just now' }]
+            ...saved,
+            participants: members,
+            messages: [{ senderId: 'system', text: `Started a chat with ${contact.name}`, timestamp: 'Just now' }]
         };
         chatsData.unshift(newChat);
         renderChatsList();
         closeModal();
-        setTimeout(() => {
-            openChat(newChat, document.querySelector(`.list-item[data-chat-id="${newChat.id}"]`));
-        }, 50);
+        setTimeout(() => openChat(newChat, document.querySelector(`.list-item[data-chat-id="${newChat.id}"]`)), 50);
+    } catch(e) {
+        console.error('createChat failed:', e);
+        // Local fallback
+        const newChat = {
+            id: 'c' + Date.now(), type: 'direct',
+            topic: contact.name, avatar: contact.avatar,
+            participants: members, members,
+            messages: [{ senderId: 'system', text: `Started a chat with ${contact.name}`, timestamp: 'Just now' }]
+        };
+        chatsData.unshift(newChat);
+        renderChatsList();
+        closeModal();
+        setTimeout(() => openChat(newChat, document.querySelector(`.list-item[data-chat-id="${newChat.id}"]`)), 50);
     }
 };
 
@@ -2001,72 +1991,39 @@ window.createGroup = async function () {
     const name = document.getElementById('new-group-name').value || 'New Group';
     const checkboxes = document.querySelectorAll('input[name="group-member"]:checked');
     const selectedMembers = [currentUser.id];
-    checkboxes.forEach(cb => {
-        if (!selectedMembers.includes(cb.value)) selectedMembers.push(cb.value);
-    });
+    checkboxes.forEach(cb => { if (!selectedMembers.includes(cb.value)) selectedMembers.push(cb.value); });
 
+    const token = localStorage.getItem('unibuzz_token');
     const groupPayload = {
         topic: name,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
         description: document.getElementById('new-group-desc').value,
-        type: 'group'
+        type: 'group',
+        members: selectedMembers,
+        admins: [currentUser.id]
     };
 
-    if (window.supabaseClient) {
-        const { data, error } = await window.supabaseClient.from('groups').insert([groupPayload]).select();
-        if (error) {
-            alert("Error creating group: " + error.message);
-            return;
-        }
-        if (!error && data) {
-            const newGroupId = data[0].id;
-            const validMembers = selectedMembers.filter(mId => !users[mId]?.isDummy);
-            const membersData = validMembers.map(mId => ({ group_id: newGroupId, user_id: mId, is_admin: mId === currentUser.id }));
-
-            if (membersData.length > 0) {
-                const { error: membersError } = await window.supabaseClient.from('group_members').insert(membersData);
-                if (membersError) {
-                    alert("Error adding members: " + membersError.message);
-                    return;
-                }
-
-                // Add System Messages for each member
-                const systemMsgs = selectedMembers.map(mId => ({
-                    chat_id: newGroupId,
-                    sender_id: 'system',
-                    text: mId === currentUser.id ? `You created the group "${groupPayload.topic}"` : `${getDisplayName(mId)} was added.`
-                }));
-                await window.supabaseClient.from('messages').insert(systemMsgs);
-            }
-
-            // Local update
-            const fullGroup = { ...data[0], members: selectedMembers, admins: [currentUser.id], messages: [{ senderId: 'system', text: `You created the group "${groupPayload.topic}"`, timestamp: 'Just now' }] };
-            groupsData.unshift(fullGroup);
-            chatsData.unshift(fullGroup);
-            activeChatId = fullGroup.id;
-            localStorage.removeItem('group_form_draft');
-            renderGroupsList();
-            renderChatsList();
-            closeModal();
-            openChat(fullGroup);
-        }
-    } else {
-        // LOCAL FALLBACK
-        const localGroup = {
-            id: 'g' + Date.now(),
-            ...groupPayload,
-            members: selectedMembers,
-            admins: [currentUser.id],
-            messages: [{ senderId: 'system', text: `You created the group "${groupPayload.topic}"`, timestamp: 'Just now' }]
-        };
-        groupsData.unshift(localGroup);
-        chatsData.unshift(localGroup);
-        activeChatId = localGroup.id;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(groupPayload)
+        });
+        const saved = await res.json();
+        const fullGroup = { ...saved, members: selectedMembers, admins: [currentUser.id], messages: [{ senderId: 'system', text: `You created the group "${name}"`, timestamp: 'Just now' }] };
+        groupsData.unshift(fullGroup);
+        chatsData.unshift(fullGroup);
         localStorage.removeItem('group_form_draft');
-        renderGroupsList();
-        renderChatsList();
+        renderGroupsList(); renderChatsList();
         closeModal();
-        openChat(localGroup);
+        openChat(fullGroup);
+    } catch(e) {
+        console.error('createGroup failed:', e);
+        const localGroup = { id: 'g' + Date.now(), ...groupPayload, messages: [{ senderId: 'system', text: `You created the group "${name}"`, timestamp: 'Just now' }] };
+        groupsData.unshift(localGroup); chatsData.unshift(localGroup);
+        localStorage.removeItem('group_form_draft');
+        renderGroupsList(); renderChatsList();
+        closeModal(); openChat(localGroup);
     }
 }
 
@@ -2074,72 +2031,37 @@ window.createCommunity = async function () {
     const name = document.getElementById('new-group-name').value || 'New Community';
     const checkboxes = document.querySelectorAll('input[name="group-member"]:checked');
     const selectedMembers = [currentUser.id];
-    checkboxes.forEach(cb => {
-        if (!selectedMembers.includes(cb.value)) selectedMembers.push(cb.value);
-    });
+    checkboxes.forEach(cb => { if (!selectedMembers.includes(cb.value)) selectedMembers.push(cb.value); });
 
+    const token = localStorage.getItem('unibuzz_token');
     const commPayload = {
         topic: name,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=10b981&color=fff`,
         description: document.getElementById('new-group-desc').value,
-        type: 'community'
+        type: 'community',
+        members: selectedMembers,
+        admins: [currentUser.id]
     };
 
-    if (window.supabaseClient) {
-        const { data, error } = await window.supabaseClient.from('groups').insert([commPayload]).select();
-        if (error) {
-            alert("Error creating community: " + error.message);
-            return;
-        }
-        if (!error && data) {
-            const newCommId = data[0].id;
-            const validMembers = selectedMembers.filter(mId => !users[mId]?.isDummy);
-            const membersData = validMembers.map(mId => ({ group_id: newCommId, user_id: mId, is_admin: mId === currentUser.id }));
-
-            if (membersData.length > 0) {
-                const { error: membersError } = await window.supabaseClient.from('group_members').insert(membersData);
-                if (membersError) {
-                    alert("Error adding members: " + membersError.message);
-                    return;
-                }
-
-                // Add System Messages for each member
-                const systemMsgs = selectedMembers.map(mId => ({
-                    chat_id: newCommId,
-                    sender_id: 'system',
-                    text: mId === currentUser.id ? `You created the community "${commPayload.topic}"` : `${getDisplayName(mId)} was added.`
-                }));
-                await window.supabaseClient.from('messages').insert(systemMsgs);
-            }
-
-            // Local update
-            const fullComm = { ...data[0], members: selectedMembers, admins: [currentUser.id], messages: [{ senderId: 'system', text: `You created the community "${commPayload.topic}"`, timestamp: 'Just now' }] };
-            communitiesData.unshift(fullComm);
-            chatsData.unshift(fullComm);
-            activeChatId = fullComm.id;
-            localStorage.removeItem('comm_form_draft');
-            renderCommunitiesList();
-            renderChatsList();
-            closeModal();
-            openChat(fullComm);
-        }
-    } else {
-        // LOCAL FALLBACK
-        const localComm = {
-            id: 'cm' + Date.now(),
-            ...commPayload,
-            members: selectedMembers,
-            admins: [currentUser.id],
-            messages: [{ senderId: 'system', text: `You created the community "${commPayload.topic}"`, timestamp: 'Just now' }]
-        };
-        communitiesData.unshift(localComm);
-        chatsData.unshift(localComm);
-        activeChatId = localComm.id;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(commPayload)
+        });
+        const saved = await res.json();
+        const fullComm = { ...saved, members: selectedMembers, admins: [currentUser.id], messages: [{ senderId: 'system', text: `You created the community "${name}"`, timestamp: 'Just now' }] };
+        communitiesData.unshift(fullComm); chatsData.unshift(fullComm);
         localStorage.removeItem('comm_form_draft');
-        renderCommunitiesList();
-        renderChatsList();
-        closeModal();
-        openChat(localComm);
+        renderCommunitiesList(); renderChatsList();
+        closeModal(); openChat(fullComm);
+    } catch(e) {
+        console.error('createCommunity failed:', e);
+        const localComm = { id: 'cm' + Date.now(), ...commPayload, messages: [{ senderId: 'system', text: `You created the community "${name}"`, timestamp: 'Just now' }] };
+        communitiesData.unshift(localComm); chatsData.unshift(localComm);
+        localStorage.removeItem('comm_form_draft');
+        renderCommunitiesList(); renderChatsList();
+        closeModal(); openChat(localComm);
     }
 }
 
