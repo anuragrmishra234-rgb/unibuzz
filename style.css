@@ -30,6 +30,12 @@
 
     --transition-fast: 0.2s ease;
     --transition-smooth: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Bootstrap Overrides */
+    --bs-primary: var(--accent-primary);
+    --bs-secondary: var(--accent-tertiary);
+    --bs-body-bg: var(--bg-main);
+    --bs-body-color: var(--text-main);
 }
 
 /* --- THEME VARIATIONS --- */
@@ -749,7 +755,6 @@ textarea:focus {
     width: 98vw;
     height: 96vh;
     max-width: 1600px;
-    display: flex;
     background: var(--bg-main);
     overflow: hidden;
     position: relative;
@@ -835,11 +840,12 @@ textarea:focus {
 
 /* Secondary Side Panel (Lists) */
 .side-panel {
-    width: 360px;
     background: var(--bg-panel);
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 .panel-header {
@@ -1242,6 +1248,9 @@ textarea:focus {
         max-width: none;
         border-radius: 0;
         border: none;
+    }
+
+    .app-layout > .row {
         flex-direction: column-reverse; /* Navigation at bottom */
     }
 

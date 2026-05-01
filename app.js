@@ -133,6 +133,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Initialize Bootstrap Modals
+    window.mainModal = new bootstrap.Modal(document.getElementById('modal-overlay'));
+
     document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
         document.body.classList.remove('mobile-chat-active');
         activeChatId = null;
@@ -636,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await syncUserProfile();
                 }
                 alert("Account updated!");
-                document.getElementById('account-modal').classList.add('hidden');
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('account-modal')).hide();
             }
         });
 
@@ -1418,7 +1421,7 @@ window.saveWallpaper = function () {
         msgsArea.style.backgroundSize = 'cover';
         msgsArea.style.backgroundPosition = 'center';
         alert("Wallpaper applied! 🖼️");
-        document.getElementById('chats-settings-modal').classList.add('hidden');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('chats-settings-modal')).hide();
     }
 };
 
@@ -1786,7 +1789,7 @@ window.contactAuthor = async function (authorId, title) {
 
 // --- Modals (Add Data) ---
 function handleAddNewAction() {
-    modalOverlay.classList.remove('hidden');
+    window.mainModal.show();
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
 
@@ -1970,7 +1973,7 @@ function handleAddNewAction() {
 }
 
 function closeModal() {
-    modalOverlay.classList.add('hidden');
+    window.mainModal.hide();
 }
 
 // exposed functions for mock forms
