@@ -722,54 +722,55 @@ window.unarchiveFromSidebar = function (id) {
 };
 
 async function fetchProfiles() {
-    const { data, error } = await window.supabaseClient.from('profiles').select('*');
-    if (!error && data) {
-        data.forEach(p => {
-            users[p.id] = { id: p.id, name: p.name, avatar: p.avatar, bio: p.bio, phone: p.phone, email: p.email || p.id };
-            if (p.id === currentUser.id) {
-                currentUser.name = p.name;
-                currentUser.avatar = p.avatar;
-                currentUser.bio = p.bio;
-                currentUser.phone = p.phone;
-                document.getElementById('profile-display-name').textContent = p.name;
-                document.getElementById('profile-sidebar-img').src = p.avatar;
-            }
+    const token = localStorage.getItem('unibuzz_token');
+    if (!token) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/profiles`, {
+            headers: { 'Authorization': `Bearer ${token}` }
         });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+            data.forEach(p => {
+                const id = p.id || p._id;
+                users[id] = { id, name: p.name, avatar: p.avatar, bio: p.bio, phone: p.phone, email: p.email || id };
+                if (id === currentUser.id) {
+                    currentUser.name = p.name || currentUser.name;
+                    currentUser.avatar = p.avatar || currentUser.avatar;
+                    currentUser.bio = p.bio;
+                    currentUser.phone = p.phone;
+                    const dn = document.getElementById('profile-display-name');
+                    if (dn) dn.textContent = currentUser.name;
+                    const si = document.getElementById('profile-sidebar-img');
+                    if (si && currentUser.avatar) si.src = currentUser.avatar;
+                }
+            });
+        }
+    } catch(e) {
+        console.warn('fetchProfiles failed:', e);
     }
 }
 
 async function fetchGroups() {
-    // 1. Fetch Groups
-    if (!window.supabaseClient) return;
-    const { data: groups, error: gError } = await window.supabaseClient.from('groups').select('*');
-    if (gError) return;
-
-    // 2. Fetch Members for each group
-    const { data: members, error: mError } = await window.supabaseClient.from('group_members').select('*');
-
-    if (!mError && members) {
-        // Fetch All Messages to populate sidebar snippets
-        const { data: allMessages, error: msgError } = await window.supabaseClient.from('messages').select('*').order('created_at', { ascending: true });
+    const token = localStorage.getItem('unibuzz_token');
+    if (!token) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/groups`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const groups = await res.json();
+        if (!Array.isArray(groups)) return;
 
         groups.forEach(g => {
-            g.members = members.filter(m => m.group_id === g.id).map(m => m.user_id);
-            g.admins = members.filter(m => m.group_id === g.id && m.is_admin).map(m => m.user_id);
-
-            const groupMsgs = allMessages ? allMessages.filter(msg => msg.chat_id === g.id) : [];
-            g.messages = groupMsgs.length > 0 ? groupMsgs.map(row => ({
-                id: row.id,
-                senderId: row.sender_id,
-                text: row.text,
-                timestamp: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            })) : [{ senderId: 'system', text: 'Welcome!', timestamp: '' }];
+            if (!g.messages) g.messages = [{ senderId: 'system', text: 'Welcome!', timestamp: '' }];
+            if (!g.members) g.members = [];
+            if (!g.admins) g.admins = [];
         });
-    }
 
-    groupsData = [...groups.filter(g => g.type === 'group')];
-    communitiesData = [...groups.filter(g => g.type === 'community')];
+        groupsData = groups.filter(g => g.type === 'group');
+        communitiesData = groups.filter(g => g.type === 'community');
 
-    const dbChats = groups.map(g => {
-        if (g.type === 'direct') {
+        // Direct chats
+        const directChats = groups.filter(g => g.type === 'direct').map(g => {
             g.participants = g.members;
             if (g.members) {
                 const otherUserId = g.members.find(id => id !== currentUser.id);
@@ -777,132 +778,48 @@ async function fetchGroups() {
                     g.topic = users[otherUserId].name;
                     g.avatar = users[otherUserId].avatar;
                 } else if (!otherUserId) {
-                    // Chat with self
-                    g.topic = currentUser.name + " (You)";
+                    g.topic = currentUser.name + ' (You)';
                     g.avatar = currentUser.avatar;
                 } else {
-                    g.topic = "User";
+                    g.topic = g.topic || 'User';
                 }
             }
-        }
-        return g;
-    });
+            return g;
+        });
 
-    // Merge DB chats with dummy chats (Avoid duplicates)
-    dbChats.forEach(dbC => {
-        if (!chatsData.find(d => d.id === dbC.id)) chatsData.push(dbC);
-    });
+        directChats.forEach(dbC => {
+            if (!chatsData.find(d => d.id === dbC.id)) chatsData.push(dbC);
+        });
+    } catch(e) {
+        console.warn('fetchGroups failed:', e);
+    }
 }
 
-// 3. Central Real-time Subscriptions (Call once)
+// Real-time sidebar updates via socket.io
 function initRealtime() {
-    if (!window.supabaseClient) return;
-
-    window.supabaseClient
-        .channel('public:groups')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'groups' }, async () => {
-            await fetchGroups();
-            renderGroupsList();
-            renderCommunitiesList();
-            renderChatsList();
-        })
-        .subscribe();
-
-    window.supabaseClient
-        .channel('public:group_members')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, async () => {
-            await fetchGroups();
-            if (activeChatId) {
-                const group = [...groupsData, ...communitiesData, ...chatsData].find(g => g.id === activeChatId);
-                if (group) {
-                    chatStatus.textContent = group.type === 'direct' ? 'Online' : `${group.members.length} members`;
-                    if (!groupInfoSidebar.classList.contains('hidden')) populateGroupInfo();
-                    if (typeof updateJoinStatusUI === 'function') updateJoinStatusUI(group);
-                }
+    if (!window.socket) return;
+    window.socket.on('global_message_update', async (newMsg) => {
+        const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === newMsg.chat_id);
+        if (chat) {
+            if (!chat.messages) chat.messages = [];
+            if (!chat.messages.find(m => m.id === (newMsg.id || newMsg._id))) {
+                chat.messages.push({
+                    id: newMsg.id || newMsg._id,
+                    senderId: newMsg.sender_id,
+                    text: newMsg.text,
+                    timestamp: new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+                renderChatsList();
+                renderGroupsList();
+                renderCommunitiesList();
             }
-            renderGroupsList();
-            renderCommunitiesList();
-            renderChatsList();
-        })
-        .subscribe();
-
-    window.supabaseClient
-        .channel('public:listings')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'listings' }, payload => {
-            const item = payload.new;
-            const newItem = {
-                id: item.id,
-                title: item.title,
-                type: item.type,
-                description: item.description,
-                author: item.author_id,
-                timestamp: new Date(item.created_at).toLocaleDateString(),
-                image: item.image_url,
-                contact: item.contact
-            };
-            if (!lostFoundData.find(i => i.id === newItem.id)) {
-                lostFoundData.unshift(newItem);
-                renderLFList();
-            }
-        })
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'listings' }, payload => {
-            const deletedId = payload.old.id;
-            const index = lostFoundData.findIndex(i => i.id === deletedId);
-            if (index !== -1) {
-                lostFoundData.splice(index, 1);
-                renderLFList();
-                if (activeLFId === deletedId) switchTab('lost-found');
-            }
-        })
-        .subscribe();
-
-    // Global Message Listener for Sidebar updates
-    window.supabaseClient
-        .channel('public:messages_global')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-            const newMsg = payload.new;
-            const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === newMsg.chat_id);
-            if (chat) {
-                if (!chat.messages) chat.messages = [];
-                if (!chat.messages.find(m => m.id === newMsg.id)) {
-                    chat.messages.push({
-                        id: newMsg.id,
-                        senderId: newMsg.sender_id,
-                        text: newMsg.text,
-                        timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    });
-                    // Re-render only if the sidebar is relevant
-                    renderChatsList();
-                    renderGroupsList();
-                    renderCommunitiesList();
-                }
-            }
-        })
-        .subscribe();
+        }
+    });
 }
 
 async function fetchListings() {
-    if (!window.supabaseClient) return;
-    try {
-        const { data, error } = await window.supabaseClient.from('listings').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-            lostFoundData.length = 0;
-            data.forEach(item => {
-                lostFoundData.push({
-                    id: item.id,
-                    title: item.title,
-                    type: item.type,
-                    description: item.description,
-                    author: item.author_id,
-                    timestamp: new Date(item.created_at).toLocaleDateString(),
-                    image: item.image_url,
-                    contact: item.contact
-                });
-            });
-        }
-    } catch (e) {
-        console.error("Fetch listings failed:", e);
-    }
+    // Listings are local-only for now; backend endpoint can be added later
+    // lostFoundData is populated via the add-new flow
 }
 
 // --- Navigation & Routing ---
