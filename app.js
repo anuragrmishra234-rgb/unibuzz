@@ -1344,9 +1344,9 @@ async function sendMessage() {
 
     const token = localStorage.getItem('unibuzz_token');
 
-    // Optimistic UI update: show message immediately
-    const chatItems = currentTab === 'chats' ? chatsData : (currentTab === 'groups' ? groupsData : communitiesData);
-    const chat = chatItems.find(c => c.id === activeChatId);
+    // Search ALL arrays - not just current tab - to always find the active chat
+    const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === activeChatId);
+
     const tempId = 'temp_' + Date.now();
     const optimisticMsg = {
         id: tempId,
@@ -1354,14 +1354,23 @@ async function sendMessage() {
         text: text,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-    if (chat) { chat.messages = chat.messages || []; chat.messages.push(optimisticMsg); }
+
+    // Always show message immediately (optimistic UI)
+    if (chat) {
+        chat.messages = chat.messages || [];
+        chat.messages.push(optimisticMsg);
+        renderMessages(chat);
+    } else {
+        // Even if chat not found in arrays, at least show the message visually
+        const fakeChat = { id: activeChatId, messages: [optimisticMsg], type: 'direct' };
+        renderMessages(fakeChat);
+    }
+
     messageInput.value = '';
     localStorage.removeItem(`draft_${activeChatId}`);
-    if (chat) renderMessages(chat);
     scrollToBottom();
 
     if (token) {
-        // Send to MERN backend
         try {
             const res = await fetch(`${BACKEND_URL}/api/messages`, {
                 method: 'POST',
@@ -1369,14 +1378,11 @@ async function sendMessage() {
                 body: JSON.stringify({ chat_id: activeChatId, text, sender_id: currentUser.id })
             });
             const saved = await res.json();
-            // Replace optimistic message with real one from server
             if (chat && saved.id) {
                 const idx = chat.messages.findIndex(m => m.id === tempId);
                 if (idx !== -1) {
                     chat.messages[idx] = {
-                        id: saved.id,
-                        senderId: saved.sender_id,
-                        text: saved.text,
+                        id: saved.id, senderId: saved.sender_id, text: saved.text,
                         timestamp: new Date(saved.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     };
                     renderMessages(chat);
@@ -1387,9 +1393,9 @@ async function sendMessage() {
         }
     }
 
-    if (currentTab === 'chats') renderChatsList();
-    else if (currentTab === 'groups') renderGroupsList();
-    else renderCommunitiesList();
+    renderChatsList();
+    renderGroupsList();
+    renderCommunitiesList();
 }
 
 function scrollToBottom() {
