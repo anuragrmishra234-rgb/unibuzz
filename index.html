@@ -48,8 +48,8 @@
             }
         }
     </style>
-    <!-- Supabase JS Library -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Socket.io Library -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
 <body>
@@ -605,15 +605,7 @@
             </div>
         </div>
     </div>
-    <script>
-        // Use your actual Supabase project keys
-        const SUPABASE_URL = 'https://svopreloeopwtkrbexjw.supabase.co'; // ✅ I added your URL!
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2b3ByZWxvZW9wd3RrcmJleGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxNjYwMDUsImV4cCI6MjA4OTc0MjAwNX0.AtAQbI-6BXugCCwOJIPXrEzUtWPQyZKOjfn23UzCkA0'; //  You still need to replace this!
 
-        // Initialize Supabase Client globally so app.js can use it
-        const { createClient } = supabase;
-        window.supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    </script>
 
     <script src="app.js"></script>
 </body>
