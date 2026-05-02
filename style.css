@@ -1867,33 +1867,6 @@ textarea:focus {
     flex-shrink: 0;
 }
 
-.online-dot, .status-pill-dot {
-    display: none;
-}
-
-.is-logged-in .online-dot, .is-logged-in .status-pill-dot {
-    display: block;
-}
-
-.online-dot {
-    position: absolute;
-    bottom: 1px;
-    right: 1px;
-    width: 10px;
-    height: 10px;
-    background: var(--success);
-    border-radius: 50%;
-    border: 2px solid var(--bg-panel);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
-    animation: onlinePulse 2s infinite;
-}
-
-@keyframes onlinePulse {
-    0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
-    70%  { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
 /* ================================================
    SKELETON LOADING SHIMMER
    ================================================ */

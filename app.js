@@ -228,12 +228,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const finalizeAuth = () => {
             if (isAuthenticated) {
-                document.body.classList.add('is-logged-in');
                 loginScreen.classList.add('hidden');
                 appScreen.classList.remove('hidden');
                 initApp();
             } else {
-                document.body.classList.remove('is-logged-in');
                 loginScreen.classList.remove('hidden');
             }
             removeSplash();
@@ -1508,7 +1506,6 @@ window.archiveChat = function () {
 
 window.logout = function () {
     if (confirm('Logout from UNIBUZZ? 🥺')) {
-        document.body.classList.remove('is-logged-in');
         // Keep last_user for "Continue As" functionality
         const lastUser = { name: currentUser.name, avatar: currentUser.avatar, email: currentUser.email };
         localStorage.setItem('last_user', JSON.stringify(lastUser));
