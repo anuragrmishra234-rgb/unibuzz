@@ -1867,6 +1867,14 @@ textarea:focus {
     flex-shrink: 0;
 }
 
+.online-dot, .status-pill-dot {
+    display: none;
+}
+
+.is-logged-in .online-dot, .is-logged-in .status-pill-dot {
+    display: block;
+}
+
 .online-dot {
     position: absolute;
     bottom: 1px;
