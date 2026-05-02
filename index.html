@@ -67,6 +67,10 @@
 
     <!-- Login Screen -->
     <div id="login-screen" class="screen hidden">
+        <!-- Animated background orbs -->
+        <div class="login-orb login-orb-1"></div>
+        <div class="login-orb login-orb-2"></div>
+        <div class="login-orb login-orb-3"></div>
         <div class="login-screen-wrapper">
             <div class="login-container">
                 <div class="logo">
@@ -122,11 +126,11 @@
                     </div>
                     <div class="input-group">
                         <i class="ph ph-envelope-simple"></i>
-                        <input type="email" id="email" placeholder="College Email" required value="student@college.edu">
+                        <input type="email" id="email" placeholder="College Email" required autocomplete="email">
                     </div>
                     <div class="input-group">
                         <i class="ph ph-lock-key"></i>
-                        <input type="password" id="password" placeholder="Password" required value="password123">
+                        <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
                     </div>
                     <button type="submit" class="primary-btn w-full" id="auth-submit-btn">Continue</button>
                     <button type="button" class="icon-btn w-full mt-4 text-sm hidden" id="back-to-dashboard"
@@ -151,30 +155,33 @@
                     </div>
                     <div class="nav-separator"></div>
                     <!-- Nav Icons -->
-                    <div class="nav-item active" data-tab="chats" title="Chats">
+                    <div class="nav-item active" data-tab="chats" data-tooltip="Chats">
                         <i class="ph ph-chat-circle-dots"></i>
                     </div>
-                    <div class="nav-item" data-tab="groups" title="Groups">
+                    <div class="nav-item" data-tab="groups" data-tooltip="Groups">
                         <i class="ph ph-users"></i>
                     </div>
-                    <div class="nav-item" data-tab="communities" title="Communities">
+                    <div class="nav-item" data-tab="communities" data-tooltip="Communities">
                         <i class="ph ph-users-three"></i>
                     </div>
-                    <div class="nav-item" data-tab="lost-found" title="Lost & Found">
+                    <div class="nav-item" data-tab="lost-found" data-tooltip="Lost & Found">
                         <i class="ph ph-magnifying-glass"></i>
                     </div>
-                    <div class="nav-item" id="settings-nav-btn" title="Settings">
+                    <div class="nav-item" id="settings-nav-btn" data-tooltip="Settings">
                         <i class="ph ph-gear"></i>
                     </div>
                 </div>
                 <div class="nav-bottom">
 
-                    <div class="nav-item" id="theme-toggle" title="Toggle Theme">
+                    <div class="nav-item" id="theme-toggle" data-tooltip="Toggle Theme">
                         <i class="ph ph-moon"></i>
                     </div>
                     <div class="nav-separator"></div>
-                    <img src="https://i.pravatar.cc/150?u=u1" class="avatar avatar-md cursor-pointer"
-                        id="profile-trigger" title="My Profile" alt="Profile">
+                    <div class="avatar-wrapper" style="margin: 0.5rem 0;">
+                        <img src="https://i.pravatar.cc/150?u=u1" class="avatar avatar-md cursor-pointer"
+                            id="profile-trigger" title="My Profile" alt="Profile">
+                        <div class="online-dot"></div>
+                    </div>
                 </div>
             </nav>
 
@@ -246,11 +253,14 @@
                             <button class="icon-btn mobile-back-btn" id="mobile-back-btn" style="display: none; margin-right: 8px;">
                                 <i class="ph ph-arrow-left"></i>
                             </button>
-                            <img src="" id="current-chat-avatar" class="avatar avatar-md" alt="">
+                            <div class="avatar-wrapper">
+                                <img src="" id="current-chat-avatar" class="avatar avatar-md" alt="">
+                                <div class="online-dot"></div>
+                            </div>
                             <div class="chat-title-group">
                                 <h3 id="current-chat-name">...</h3>
                                 <div class="flex items-center gap-1">
-                                    <span id="current-chat-status" class="status-text">...</span>
+                                    <span class="status-pill"><span class="status-pill-dot"></span><span id="current-chat-status">Online</span></span>
                                     <span class="text-xs text-dimmed flex items-center gap-1 badge-encrypted"
                                         style="margin-left:8px; opacity:0.8;"><i
                                             class="ph-fill ph-shield-check"></i> Encrypted</span>
@@ -279,6 +289,16 @@
                     <!-- Messages Area -->
                     <div class="messages-area scrollable custom-scrollbar" id="messages-container">
                         <!-- Messages populated by JS -->
+                    </div>
+
+                    <!-- Typing Indicator -->
+                    <div class="typing-indicator" id="typing-indicator">
+                        <div class="typing-bubble">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                        <span class="typing-name" id="typing-name">Someone is typing...</span>
                     </div>
 
                     <!-- Input Area -->
@@ -609,6 +629,9 @@
         </div>
     </div>
 
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
 
     <script src="app.js"></script>
 </body>

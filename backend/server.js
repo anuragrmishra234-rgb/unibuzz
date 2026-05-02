@@ -36,6 +36,11 @@ io.on('connection', (socket) => {
     socket.join(chatId);
   });
 
+  // Typing indicator relay
+  socket.on('user_typing', (data) => {
+    socket.to(data.chatId).emit('user_typing', data);
+  });
+
   // When a user sends a message via socket instead of HTTP
   socket.on('send_message', (data) => {
     socket.to(data.chat_id).emit('receive_message', data);

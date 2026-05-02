@@ -1,5 +1,45 @@
 // Mock Database (Now Dynamic)
 const BACKEND_URL = 'https://unibuzz-bd9g.onrender.com';
+
+// ================================================
+//  TOAST NOTIFICATION SYSTEM
+// ================================================
+window.showToast = function(message, type = 'info', duration = 3000) {
+    const container = document.getElementById('toast-container');
+    if (!container) { console.log('[Toast]', message); return; }
+
+    const iconMap = {
+        success: 'ph-check-circle-fill',
+        error:   'ph-x-circle-fill',
+        warning: 'ph-warning-fill',
+        info:    'ph-info-fill'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast-item toast-${type}`;
+    toast.innerHTML = `
+        <i class="ph-fill ${iconMap[type] || iconMap.info} toast-icon"></i>
+        <span>${message}</span>
+    `;
+
+    // Override the ::before timer to match actual duration
+    toast.style.setProperty('--toast-duration', `${duration}ms`);
+
+    toast.addEventListener('click', () => dismissToast(toast));
+    container.appendChild(toast);
+
+    const timer = setTimeout(() => dismissToast(toast), duration);
+    toast._timer = timer;
+    return toast;
+};
+
+function dismissToast(toast) {
+    clearTimeout(toast._timer);
+    toast.classList.add('toast-out');
+    setTimeout(() => toast.remove(), 350);
+}
+
+
 let currentUser = {
     id: '',
     name: '',
@@ -443,6 +483,17 @@ document.addEventListener('DOMContentLoaded', () => {
         messageInput?.addEventListener('input', handleMentions);
         messageInput?.addEventListener('click', () => mentionPopup.classList.add('hidden'));
 
+        // Emit typing indicator to socket
+        let typingTimeout;
+        messageInput?.addEventListener('input', (e) => {
+            handleMentions(e);
+            saveDraft();
+            if (activeChatId && window.socket) {
+                window.socket.emit('user_typing', { chatId: activeChatId, userId: currentUser.id });
+                clearTimeout(typingTimeout);
+            }
+        });
+
         // Navigation Tabs (Listeners only)
         document.querySelectorAll('.nav-top .nav-item[data-tab]').forEach(item => {
             item.addEventListener('click', () => switchTab(item.getAttribute('data-tab')));
@@ -482,6 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             body.setAttribute('data-theme', nextTheme);
             localStorage.setItem('unibuzz_theme', nextTheme);
+            showToast(`Switched to ${nextTheme} mode`, 'info', 1500);
         });
 
         // Initialize theme from storage
@@ -594,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveProfileBtn?.addEventListener('click', async () => {
             await autoSaveProfile();
             openSettingsView('main');
-            alert("Vibe check passed! Profile updated. ✨");
+            showToast('Profile updated! ✨', 'success');
         });
 
         document.getElementById('profile-upload')?.addEventListener('change', (e) => {
@@ -894,7 +946,21 @@ function initRealtime() {
                 contact: newListing.contact
             });
             renderLFList();
+            showToast(`New ${newListing.type} listing: "${newListing.title}"`, 'info');
         }
+    });
+
+    // 4. Typing Indicator
+    window.socket.on('user_typing', (data) => {
+        if (data.chatId !== activeChatId || data.userId === currentUser.id) return;
+        const indicator = document.getElementById('typing-indicator');
+        const nameEl = document.getElementById('typing-name');
+        if (!indicator) return;
+        const typerName = users[data.userId]?.name?.split(' ')[0] || 'Someone';
+        if (nameEl) nameEl.textContent = `${typerName} is typing...`;
+        indicator.classList.add('visible');
+        clearTimeout(window._typingTimeout);
+        window._typingTimeout = setTimeout(() => indicator.classList.remove('visible'), 2500);
     });
 }
 
@@ -1252,6 +1318,21 @@ async function openChat(chat, listItemUi) {
         const res = await fetch(`${BACKEND_URL}/api/messages/${activeChatId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
+
+        // Show skeleton while loading
+        messagesContainer.innerHTML = [
+            '<div style="display:flex;flex-direction:column;gap:12px;padding:1rem;">',
+            ...Array(4).fill(0).map((_, i) => `
+                <div style="display:flex;align-items:flex-end;gap:10px;align-self:${i%2===0?'flex-start':'flex-end'};max-width:60%;">
+                    ${i%2===0 ? '<div class="skeleton" style="width:36px;height:36px;border-radius:50%;flex-shrink:0;"></div>' : ''}
+                    <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                        <div class="skeleton" style="height:16px;width:${60+Math.random()*30}%;border-radius:12px;"></div>
+                        <div class="skeleton" style="height:40px;width:${40+Math.random()*50}%;border-radius:16px;"></div>
+                    </div>
+                </div>`),
+            '</div>'
+        ].join('');
+
         const data = await res.json();
         if (Array.isArray(data)) {
             chat.messages = data.map(row => ({
@@ -1291,37 +1372,59 @@ function renderMessages(chat) {
         return;
     }
 
+    let lastSenderId = null;
     chat.messages.forEach(msg => {
         const isSentByMe = msg.senderId === currentUser.id;
         const isSystem = msg.senderId === 'system';
         const senderName = getDisplayName(msg.senderId);
-        const senderAvatar = isSystem ? '' : (isSentByMe ? currentUser.avatar : (users[msg.senderId]?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=random`));
+        const isConsecutive = msg.senderId === lastSenderId;
+        lastSenderId = msg.senderId;
 
         if (isSystem) {
             const sysBox = document.createElement('div');
             sysBox.style.cssText = 'padding: 6px 16px; background: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.8rem; border-radius: 12px; align-self: center; margin: 8px 0; font-weight: 600; text-align: center; border: 1px solid var(--border-color);';
             sysBox.textContent = msg.text;
             messagesContainer.appendChild(sysBox);
+            lastSenderId = 'system';
             return;
         }
 
         const wrapper = document.createElement('div');
-        wrapper.className = `message-wrapper ${isSentByMe ? 'sent' : 'received'}`;
+        wrapper.className = `message-wrapper ${isSentByMe ? 'sent' : 'received'} ${isConsecutive ? 'consecutive' : ''}`;
 
-        let msgHtml = `
-            <div class="message-bubble ${msg.isAnnouncement ? 'announcement-vibe' : ''} ${msg.starred ? 'starred' : ''}">
-                ${msg.isAnnouncement ? `<div class="badge-announcement text-xs mb-1"><i class="ph ph-megaphone-simple"></i> ANNOUNCEMENT</div>` : ''}
-                ${(chat.type === 'group' || chat.type === 'community') && !isSentByMe ? `<span class="message-sender">${senderName}</span>` : ''}
-                ${msg.image ? `<img src="${msg.image}" style="width:100%; max-width:250px; border-radius:12px; margin-bottom:8px;">` : ''}
-                <div class="message-text">
-                    ${msg.text.replace(/(^|\s)@(\w+(?:\s\w+)?)/g, '$1<span class="mention" style="color:var(--accent-primary); font-weight:700; cursor:pointer;">@$2</span>')}
+        let msgHtml = '';
+        if (isSentByMe) {
+            msgHtml = `
+                <div class="message-bubble ${msg.isAnnouncement ? 'announcement-vibe' : ''} ${msg.starred ? 'starred' : ''}">
+                    ${msg.isAnnouncement ? `<div class="badge-announcement text-xs mb-1"><i class="ph ph-megaphone-simple"></i> ANNOUNCEMENT</div>` : ''}
+                    ${msg.image ? `<img src="${msg.image}" style="width:100%; max-width:250px; border-radius:12px; margin-bottom:8px;">` : ''}
+                    <div class="message-text">
+                        ${msg.text.replace(/(^|\s)@(\w+(?:\s\w+)?)/g, '$1<span class="mention" style="color:var(--accent-primary); font-weight:700; cursor:pointer;">@$2</span>')}
+                    </div>
+                    <div class="message-time">
+                        ${msg.timestamp}
+                        ${msg.starred ? '<i class="ph-fill ph-star" style="color:var(--warning); margin-left:4px;"></i>' : ''}
+                    </div>
                 </div>
-                <div class="message-time">
-                    ${msg.timestamp}
-                    ${msg.starred ? '<i class="ph-fill ph-star" style="color:var(--warning); margin-left:4px;"></i>' : ''}
+            `;
+        } else {
+            const senderAvatar = isSystem ? '' : (users[msg.senderId]?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=random`);
+            msgHtml = `
+                ${!isConsecutive ? `<img src="${senderAvatar}" class="avatar avatar-xs message-avatar" alt="">` : '<div class="avatar-spacer"></div>'}
+                <div class="message-bubble ${msg.isAnnouncement ? 'announcement-vibe' : ''} ${msg.starred ? 'starred' : ''}">
+                    ${msg.isAnnouncement ? `<div class="badge-announcement text-xs mb-1"><i class="ph ph-megaphone-simple"></i> ANNOUNCEMENT</div>` : ''}
+                    ${(chat.type === 'group' || chat.type === 'community') && !isConsecutive ? `<span class="message-sender">${senderName}</span>` : ''}
+                    ${msg.image ? `<img src="${msg.image}" style="width:100%; max-width:250px; border-radius:12px; margin-bottom:8px;">` : ''}
+                    <div class="message-text">
+                        ${msg.text.replace(/(^|\s)@(\w+(?:\s\w+)?)/g, '$1<span class="mention" style="color:var(--accent-primary); font-weight:700; cursor:pointer;">@$2</span>')}
+                    </div>
+                    <div class="message-time">
+                        ${msg.timestamp}
+                        ${msg.starred ? '<i class="ph-fill ph-star" style="color:var(--warning); margin-left:4px;"></i>' : ''}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
         wrapper.innerHTML = msgHtml;
         messagesContainer.appendChild(wrapper);
     });
@@ -1335,7 +1438,7 @@ window.starChat = function () {
     const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === activeChatId);
     if (chat) {
         chat.starred = !chat.starred;
-        alert(chat.starred ? "Chat starred! ⭐" : "Chat unstarred.");
+        showToast(chat.starred ? 'Chat starred! ⭐' : 'Chat unstarred.', chat.starred ? 'success' : 'info');
         renderChatsList();
         renderGroupsList();
     }
@@ -1346,18 +1449,20 @@ window.muteChat = function () {
     const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === activeChatId);
     if (chat) {
         chat.muted = !chat.muted;
-        alert(chat.muted ? "Group muted! 🔇" : "Group unmuted! 🔔");
+        showToast(chat.muted ? 'Group muted 🔇' : 'Group unmuted 🔔', 'info');
         renderChatsList();
         renderGroupsList();
     }
 };
 
 window.clearChat = function () {
-    if (!confirm("Clear all messages in this chat? 💀")) return;
+    if (!activeChatId) return;
     const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === activeChatId);
     if (chat) {
+        if (!confirm('Clear all messages in this chat? 💀')) return;
         chat.messages = [];
         renderMessages(chat);
+        showToast('Chat cleared 🧹', 'warning');
     }
 };
 
@@ -1393,14 +1498,14 @@ window.archiveChat = function () {
     const chat = [...chatsData, ...groupsData, ...communitiesData].find(c => c.id === activeChatId);
     if (chat) {
         chat.archived = !chat.archived;
-        alert(chat.archived ? "Chat archived! 🗄️" : "Chat unarchived! 📂");
+        showToast(chat.archived ? 'Chat archived 🗄️' : 'Chat restored 📂', 'info');
         renderChatsList();
         switchTab('chats');
     }
 };
 
 window.logout = function () {
-    if (confirm("Logout from UNIBUZZ? 🥺")) {
+    if (confirm('Logout from UNIBUZZ? 🥺')) {
         // Keep last_user for "Continue As" functionality
         const lastUser = { name: currentUser.name, avatar: currentUser.avatar, email: currentUser.email };
         localStorage.setItem('last_user', JSON.stringify(lastUser));
@@ -1426,7 +1531,7 @@ window.saveWallpaper = function () {
 };
 
 window.syncOlderMessages = function () {
-    alert("Scanning database for historical buzz... 📡\n(Sync complete up to 2024)");
+    showToast('Scanning database for historical buzz... 📡', 'info', 3000);
 };
 
 async function sendMessage() {
