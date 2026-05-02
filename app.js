@@ -1282,10 +1282,11 @@ async function openChat(chat, listItemUi) {
         groupInfoSidebar.classList.add('hidden');
         groupInfoBtn.style.display = 'block';
         chatStatus.textContent = `${chat.members.length} members`;
+        chatStatus.style.display = 'inline';
     } else {
         groupInfoSidebar.classList.add('hidden');
         groupInfoBtn.style.display = 'none';
-        chatStatus.textContent = 'Online';
+        chatStatus.style.display = 'none';
     }
 
     chatTitle.textContent = chat.topic;

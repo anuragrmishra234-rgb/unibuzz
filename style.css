@@ -2066,30 +2066,6 @@ textarea:focus {
 }
 
 /* ================================================
-   CHAT HEADER — Status Pill
-   ================================================ */
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--success);
-    background: rgba(16, 185, 129, 0.1);
-    padding: 2px 8px;
-    border-radius: 20px;
-    border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.status-pill-dot {
-    width: 6px;
-    height: 6px;
-    background: var(--success);
-    border-radius: 50%;
-    animation: onlinePulse 2s infinite;
-}
-
-/* ================================================
    IMPROVED EMPTY STATE  — re-enable content
    ================================================ */
 .empty-content p,
