@@ -965,7 +965,11 @@ textarea:focus {
     line-height: 1.4;
     position: relative;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
+    word-wrap: break-word;
+    min-width: 50px;
+    width: fit-content;
     transition: all 0.2s ease;
 }
 
@@ -1427,8 +1431,12 @@ textarea:focus {
 
     .message-bubble {
         font-size: 0.95rem;
-        padding: 0.6rem 0.9rem;
-        max-width: 90%;
+        padding: 0.65rem 1rem;
+        max-width: 100%; /* Bubble takes up available wrapper width */
+    }
+
+    .message-wrapper {
+        max-width: 92% !important;
     }
 
     .chat-input-area {
